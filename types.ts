@@ -19,3 +19,11 @@ export enum AppStatus {
   ERROR = 'ERROR',
   SUCCESS = 'SUCCESS'
 }
+
+export type AIEngine = 'gemini' | 'openrouter';
+
+export interface AIConfig {
+  engine: AIEngine;
+  openRouterKey: string;
+  model: string;
+}

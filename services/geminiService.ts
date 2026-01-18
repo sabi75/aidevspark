@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { GeneratedCode } from "../types";
+import { GeneratedCode, AIConfig } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
@@ -18,9 +18,46 @@ IMPORTANT:
 2. Include placeholder images using picsum.photos if needed.
 3. Make the app fully functional based on the prompt.
 4. Avoid any external dependencies other than Tailwind and Google Fonts.
-`;
+Return valid JSON only.`;
 
-export const generateAppCode = async (prompt: string): Promise<GeneratedCode> => {
+const callOpenRouter = async (prompt: string, config: AIConfig): Promise<GeneratedCode> => {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${config.openRouterKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT + " Output MUST be JSON." },
+        { role: "user", content: prompt }
+      ],
+      response_format: { type: "json_object" }
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error?.message || "OpenRouter API request failed");
+  }
+
+  const data = await response.json();
+  const content = data.choices[0].message.content;
+  return JSON.parse(content) as GeneratedCode;
+};
+
+export const generateAppCode = async (prompt: string, aiConfig?: AIConfig): Promise<GeneratedCode> => {
+  if (aiConfig?.engine === 'openrouter' && aiConfig.openRouterKey) {
+    try {
+      return await callOpenRouter(prompt, aiConfig);
+    } catch (error) {
+      console.error("OpenRouter Error, falling back to Gemini:", error);
+      throw error;
+    }
+  }
+
+  // Default to Gemini
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
@@ -46,6 +83,6 @@ export const generateAppCode = async (prompt: string): Promise<GeneratedCode> =>
     return JSON.parse(jsonStr) as GeneratedCode;
   } catch (error) {
     console.error("Gemini API Error:", error);
-    throw new Error("Failed to generate application code. Please try again.");
+    throw new Error("Failed to generate application code. Please check your network or API key.");
   }
 };

@@ -1,7 +1,7 @@
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { generateAppCode } from './services/geminiService';
-import { AppStatus, BuildHistory, GeneratedCode } from './types';
+import { AppStatus, BuildHistory, GeneratedCode, AIConfig } from './types';
 import PreviewFrame from './components/PreviewFrame';
 import CodeEditor from './components/CodeEditor';
 
@@ -33,6 +33,13 @@ const TEMPLATES = [
   }
 ];
 
+const OPENROUTER_MODELS = [
+  { id: "openai/gpt-4o", name: "GPT-4o" },
+  { id: "x-ai/grok-beta", name: "Grok Code Fast" },
+  { id: "deepseek/deepseek-chat", name: "DeepSeek V3.1" },
+  { id: "bigmodel/glm-4", name: "GLM 4.6" }
+];
+
 const App: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
@@ -40,7 +47,22 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<BuildHistory[]>([]);
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
   const [error, setError] = useState<string | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
+  
+  const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
+    const saved = localStorage.getItem('sparkbuilder_config');
+    return saved ? JSON.parse(saved) : {
+      engine: 'gemini',
+      openRouterKey: '',
+      model: 'openai/gpt-4o'
+    };
+  });
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem('sparkbuilder_config', JSON.stringify(aiConfig));
+  }, [aiConfig]);
 
   const handleBuild = async () => {
     if (!prompt.trim()) return;
@@ -49,7 +71,7 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      const code = await generateAppCode(prompt);
+      const code = await generateAppCode(prompt, aiConfig);
       setCurrentCode(code);
       
       const newEntry: BuildHistory = {
@@ -90,9 +112,11 @@ const App: React.FC = () => {
           <h1 className="text-xl font-bold tracking-tight text-white">Spark<span className="text-indigo-400">Builder</span> AI</h1>
         </div>
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex items-center gap-1 text-xs text-slate-500">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-            Gemini 3 Pro Powered
+          <div className="flex items-center gap-2 px-3 py-1 bg-slate-800/50 rounded-full border border-slate-700">
+            <span className={`w-2 h-2 rounded-full ${aiConfig.engine === 'gemini' ? 'bg-green-500' : 'bg-indigo-500'}`}></span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {aiConfig.engine === 'gemini' ? 'Gemini 3 Active' : 'OpenRouter Active'}
+            </span>
           </div>
         </div>
       </header>
@@ -101,8 +125,74 @@ const App: React.FC = () => {
         {/* Left Panel: Controls */}
         <aside className="w-full lg:w-96 p-6 border-r border-slate-800 flex flex-col gap-6 bg-slate-900/20 overflow-y-auto">
           
+          {/* AI Config Section */}
+          <div className="space-y-3">
+            <button 
+              onClick={() => setShowConfig(!showConfig)}
+              className="w-full flex items-center justify-between text-sm font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <span>AI Configuration</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${showConfig ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {showConfig && (
+              <div className="space-y-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800 animate-in slide-in-from-top-2 duration-200">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Generation Engine</label>
+                  <div className="flex gap-2 p-1 bg-slate-950 rounded-lg">
+                    <button
+                      onClick={() => setAiConfig({ ...aiConfig, engine: 'gemini' })}
+                      className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                        aiConfig.engine === 'gemini' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      Gemini (Built-in)
+                    </button>
+                    <button
+                      onClick={() => setAiConfig({ ...aiConfig, engine: 'openrouter' })}
+                      className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${
+                        aiConfig.engine === 'openrouter' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      OpenRouter
+                    </button>
+                  </div>
+                </div>
+
+                {aiConfig.engine === 'openrouter' && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">OpenRouter Key</label>
+                      <input
+                        type="password"
+                        value={aiConfig.openRouterKey}
+                        onChange={(e) => setAiConfig({ ...aiConfig, openRouterKey: e.target.value })}
+                        placeholder="sk-or-v1-..."
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Choose Model</label>
+                      <select
+                        value={aiConfig.model}
+                        onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none appearance-none"
+                      >
+                        {OPENROUTER_MODELS.map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Templates Section */}
-          <div className="space-y-4">
+          <div className="space-y-4 pt-4 border-t border-slate-800/50">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Quick Templates</h2>
             <div className="grid grid-cols-2 gap-2">
               {TEMPLATES.map((tmpl, idx) => (
@@ -133,7 +223,7 @@ const App: React.FC = () => {
             </div>
             <button
               onClick={handleBuild}
-              disabled={status === AppStatus.BUILDING || !prompt.trim()}
+              disabled={status === AppStatus.BUILDING || !prompt.trim() || (aiConfig.engine === 'openrouter' && !aiConfig.openRouterKey)}
               className={`w-full py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${
                 status === AppStatus.BUILDING
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
@@ -211,7 +301,7 @@ const App: React.FC = () => {
             </div>
             {currentCode && (
               <div className="text-xs text-slate-500">
-                Generated with AI Precision
+                Generated via {aiConfig.engine === 'openrouter' ? aiConfig.model.split('/')[1].toUpperCase() : 'GEMINI 3 PRO'}
               </div>
             )}
           </div>
@@ -235,7 +325,11 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <h3 className="text-xl font-bold text-white mb-2">Generating Masterpiece</h3>
-                <p className="text-slate-400 max-w-xs text-center px-4">Our AI architect is drafting, styling, and scripting your application based on your description.</p>
+                <p className="text-slate-400 max-w-xs text-center px-4 italic font-medium">
+                  {aiConfig.engine === 'openrouter' 
+                    ? `Consulting ${aiConfig.model.split('/')[1]} architect...` 
+                    : "Consulting Gemini 3 architecture..."}
+                </p>
                 <div className="mt-8 flex gap-2">
                   <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.3s]"></div>
                   <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.15s]"></div>
