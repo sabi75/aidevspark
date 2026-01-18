@@ -1,0 +1,5 @@
+{
+  "name": "SparkBuilder AI",
+  "description": "A high-performance AI-powered website and application builder that generates complete HTML, CSS, and JS from natural language descriptions using Gemini 3 Pro.",
+  "requestFramePermissions": []
+}
